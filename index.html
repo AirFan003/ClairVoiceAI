@@ -23,15 +23,23 @@
         </div>
       </header>
       <aside id="controls-panel" class="controls-panel">
+        <p class="controls-section">Voice state</p>
+        <div id="voice-state-picker" class="state-picker" role="tablist" aria-label="Voice AI state">
+          <button type="button" class="state-btn is-active" data-voice-state="idle">Idle</button>
+          <button type="button" class="state-btn" data-voice-state="listening">Listening</button>
+          <button type="button" class="state-btn" data-voice-state="thinking">Thinking</button>
+          <button type="button" class="state-btn" data-voice-state="answering">Answering</button>
+        </div>
+
         <label class="control" for="noise-level">
           <span class="control-label">Noise level</span>
-          <span id="noise-level-value" class="control-value">100%</span>
-          <input id="noise-level" type="range" min="0" max="1" step="0.01" value="1" />
+          <span id="noise-level-value" class="control-value">30%</span>
+          <input id="noise-level" type="range" min="0" max="1" step="0.01" value="0.3" />
         </label>
         <label class="control" for="wave-density">
           <span class="control-label">Wave density</span>
-          <span id="wave-density-value" class="control-value">1.8</span>
-          <input id="wave-density" type="range" min="0.1" max="3" step="0.1" value="1.8" />
+          <span id="wave-density-value" class="control-value">0.9</span>
+          <input id="wave-density" type="range" min="0.1" max="3" step="0.1" value="0.9" />
         </label>
         <label class="control" for="refraction-ratio">
           <span class="control-label">Refraction ratio</span>
@@ -54,6 +62,84 @@
           <span class="control-label">Thickness</span>
           <span id="thickness-value" class="control-value">1.5</span>
           <input id="thickness" type="range" min="0" max="5" step="0.1" value="1.5" />
+        </label>
+
+        <p class="controls-section">Colors</p>
+
+        <label class="control control-color" for="wave-primary">
+          <span class="control-label">Wave primary</span>
+          <input id="wave-primary" type="color" value="#ffc4b0" />
+        </label>
+        <label class="control control-color" for="wave-secondary">
+          <span class="control-label">Wave secondary</span>
+          <input id="wave-secondary" type="color" value="#fff5ee" />
+        </label>
+        <label class="control control-color" for="shell-tint">
+          <span class="control-label">Glass base</span>
+          <input id="shell-tint" type="color" value="#edd5c8" />
+        </label>
+        <label class="control control-color" for="shell-iridescence">
+          <span class="control-label">Glass iridescence</span>
+          <input id="shell-iridescence" type="color" value="#e8c4d8" />
+        </label>
+        <label class="control" for="iridescence-strength">
+          <span class="control-label">Iridescence blend</span>
+          <span id="iridescence-strength-value" class="control-value">55%</span>
+          <input
+            id="iridescence-strength"
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value="0.55"
+          />
+        </label>
+        <label class="control control-color" for="rim-color">
+          <span class="control-label">Rim glow</span>
+          <input id="rim-color" type="color" value="#fff8f4" />
+        </label>
+
+        <p class="controls-section">Wave structure</p>
+
+        <label class="control" for="petal-count">
+          <span class="control-label">Petal count</span>
+          <span id="petal-count-value" class="control-value">5</span>
+          <input id="petal-count" type="range" min="3" max="12" step="1" value="5" />
+        </label>
+        <label class="control" for="petal-strength">
+          <span class="control-label">Petal strength</span>
+          <span id="petal-strength-value" class="control-value">52%</span>
+          <input id="petal-strength" type="range" min="0" max="1" step="0.01" value="0.52" />
+        </label>
+        <label class="control" for="bloom-rings">
+          <span class="control-label">Bloom rings</span>
+          <span id="bloom-rings-value" class="control-value">2.0</span>
+          <input id="bloom-rings" type="range" min="0" max="4" step="0.1" value="2.0" />
+        </label>
+        <label class="control" for="fractal-iters">
+          <span class="control-label">Fractal depth</span>
+          <span id="fractal-iters-value" class="control-value">4</span>
+          <input id="fractal-iters" type="range" min="2" max="8" step="1" value="4" />
+        </label>
+        <label class="control" for="fractal-scale">
+          <span class="control-label">Fold tightness</span>
+          <span id="fractal-scale-value" class="control-value">0.97</span>
+          <input id="fractal-scale" type="range" min="0.65" max="1" step="0.01" value="0.97" />
+        </label>
+        <label class="control" for="fractal-decay">
+          <span class="control-label">Line sharpness</span>
+          <span id="fractal-decay-value" class="control-value">-17.5</span>
+          <input id="fractal-decay" type="range" min="-28" max="-8" step="0.5" value="-17.5" />
+        </label>
+        <label class="control" for="smoothness">
+          <span class="control-label">Smoothness</span>
+          <span id="smoothness-value" class="control-value">0.028</span>
+          <input id="smoothness" type="range" min="0" max="0.1" step="0.001" value="0.028" />
+        </label>
+        <label class="control" for="asymmetry">
+          <span class="control-label">Asymmetry</span>
+          <span id="asymmetry-value" class="control-value">0.22</span>
+          <input id="asymmetry" type="range" min="0" max="0.8" step="0.01" value="0.22" />
         </label>
       </aside>
       <canvas id="orb-canvas"></canvas>

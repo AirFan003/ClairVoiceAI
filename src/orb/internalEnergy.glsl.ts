@@ -1,4 +1,4 @@
-/** Volumetric fractal energy — adapted from Magical AI Orb (sabosugi) */
+/** Volumetric fractal energy — Magical AI Orb, tuned for floral radial structure */
 export const internalEnergyGLSL = /* glsl */ `
 uniform float uTime;
 uniform vec3 uLocalCamPos;
@@ -11,6 +11,38 @@ uniform float uFractalDecay;
 uniform float uInternalAnim;
 uniform float uSmoothness;
 uniform float uAsymmetry;
+uniform float uPetalCount;
+uniform float uPetalStrength;
+uniform float uBloomRings;
+
+float petalEnvelope(vec3 anchor) {
+  if (uPetalStrength < 0.001) return 1.0;
+
+  float azimuth = atan(anchor.y, anchor.x);
+  float radius = length(anchor);
+  float elevation = atan(length(anchor.xy), anchor.z + 0.001);
+  float spin = uTime * uInternalAnim * 0.15;
+
+  float lobeWave = cos(uPetalCount * azimuth + spin);
+  float lobes = pow(clamp(0.5 + 0.5 * lobeWave, 0.0, 1.0), mix(1.0, 2.2, uPetalStrength));
+  float tips = pow(abs(sin(uPetalCount * 0.5 * azimuth + spin * 0.5)), mix(1.0, 1.6, uPetalStrength));
+  float depth = 0.55 + 0.45 * cos(uPetalCount * 0.5 * elevation + spin * 0.5);
+  float rings = 1.0;
+
+  if (uBloomRings > 0.01) {
+    float ringWave = abs(sin(radius * uBloomRings * 2.8 - spin * 0.7));
+    rings = 0.28 + 0.72 * pow(ringWave, 0.75);
+  }
+
+  float core = smoothstep(0.0, 0.18, radius);
+  float edge = 1.0 - smoothstep(1.35, 1.82, radius);
+  float stamen = exp(-radius * radius * 10.0);
+  float envelope = lobes * mix(1.0, tips, 0.45) * depth * rings * core * edge;
+  envelope = mix(envelope, 1.0, stamen * uPetalStrength * 0.55);
+  envelope = pow(envelope, mix(1.0, 0.58, uPetalStrength));
+
+  return mix(1.0, envelope, uPetalStrength);
+}
 
 float evaluateStructure(vec3 pos) {
   float densityAcc = 0.0;
@@ -35,6 +67,13 @@ float evaluateStructure(vec3 pos) {
     pos.yz *= rotAsym2;
     pos += vec3(0.05, -0.02, 0.03) * uAsymmetry;
 
+    if (uPetalStrength > 0.001) {
+      float angle = atan(pos.y, pos.x);
+      float pinch = 1.0 + uPetalStrength * 0.2 * cos(uPetalCount * angle + float(step) * 0.35);
+      pos.xy *= pinch;
+      pos.z *= 1.0 - uPetalStrength * 0.06 * (1.0 - cos(uPetalCount * angle));
+    }
+
     vec3 foldedPos = sqrt(pos * pos + uSmoothness);
     float magnitudeSq = max(dot(foldedPos, foldedPos), 0.00001);
     pos = (uFractalScale * foldedPos / magnitudeSq) - uFractalScale;
@@ -48,7 +87,7 @@ float evaluateStructure(vec3 pos) {
     densityAcc += exp(uFractalDecay * abs(dot(pos, anchor)));
   }
 
-  return densityAcc * 0.5;
+  return densityAcc * 0.5 * petalEnvelope(anchor);
 }
 
 vec2 getVolumeBounds(vec3 origin, vec3 dir, float radius) {
@@ -72,9 +111,10 @@ vec3 traceEnergy(vec3 origin, vec3 dir, vec2 limits) {
 
     vec3 samplePoint = origin + currentDepth * dir;
     fieldVal = evaluateStructure(samplePoint);
+    fieldVal = pow(max(fieldVal, 0.0), mix(1.0, 0.68, uPetalStrength));
 
     float vSq = fieldVal * fieldVal;
-    float gradientBlend = smoothstep(0.0, 0.4, fieldVal);
+    float gradientBlend = smoothstep(0.0, mix(0.4, 0.22, uPetalStrength), fieldVal);
     vec3 currentGradient = mix(uSecondaryColor, uPrimaryColor, gradientBlend);
     vec3 emission = currentGradient * (fieldVal * 1.8 + vSq * 1.0);
 
