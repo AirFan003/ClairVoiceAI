@@ -1,23 +1,28 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { bakeSoftEnvCube, bakeSoftEnvPMREM } from './softEnvironment';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { bubbleFragmentShader, bubbleVertexShader } from './bubbleShaders';
 
-/** Soft Clair palette — tuned for a warm, feminine glass bubble */
-const BUBBLE = {
-  background: 0xf5f0f2,
-  tint: 0xffe8f0,
-  attenuation: 0xffb3c6,
-  rim: 0xf472b6,
-  radius: 2,
-};
+const BUBBLE = { background: 0x000000, radius: 2 };
 
 export class ClairOrb {
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
+  private composer: EffectComposer;
   private controls: OrbitControls;
   private orb: THREE.Mesh;
+  private material: THREE.ShaderMaterial;
+  private envMap!: THREE.Texture;
   private clock = new THREE.Clock();
+
+  noiseLevel = 1;
+  refractionRatio = 0.985;
+  reflectivity = 0.55;
+  thickness = 1.5;
 
   constructor(canvas: HTMLCanvasElement) {
     this.scene = new THREE.Scene();
@@ -31,19 +36,16 @@ export class ClairOrb {
     );
     this.camera.position.set(0, 0, 6);
 
-    this.renderer = new THREE.WebGLRenderer({
-      canvas,
-      antialias: true,
-    });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.1;
 
-    // Environment reflections give the bubble its glassy specular highlights
-    const pmrem = new THREE.PMREMGenerator(this.renderer);
-    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    pmrem.dispose();
+    const baked = bakeSoftEnvCube(this.renderer);
+    this.envMap = baked.texture;
+    this.cubeRenderTarget = baked.target;
+    this.scene.environment = bakeSoftEnvPMREM(this.renderer);
 
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
@@ -51,52 +53,64 @@ export class ClairOrb {
     this.controls.enablePan = false;
     this.controls.minDistance = 3.5;
     this.controls.maxDistance = 12;
+    this.controls.autoRotate = true;
+    this.controls.autoRotateSpeed = 0.45;
 
-    this.setupLights();
-    this.orb = this.createBubble();
+    this.material = new THREE.ShaderMaterial({
+      vertexShader: bubbleVertexShader,
+      fragmentShader: bubbleFragmentShader,
+      uniforms: {
+        uTime: { value: 0 },
+        uNoiseLevel: { value: this.noiseLevel },
+        uRefractionRatio: { value: this.refractionRatio },
+        uReflectivity: { value: this.reflectivity },
+        uThickness: { value: this.thickness },
+        uEnvMap: { value: this.envMap },
+      },
+      transparent: true,
+      depthWrite: false,
+      side: THREE.FrontSide,
+    });
+
+    this.orb = new THREE.Mesh(
+      new THREE.SphereGeometry(BUBBLE.radius, 128, 128),
+      this.material
+    );
     this.scene.add(this.orb);
+
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    const bloom = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.35,
+      0.45,
+      0.75
+    );
+    this.composer.addPass(bloom);
 
     window.addEventListener('resize', this.onResize);
   }
 
-  private setupLights(): void {
-    const ambient = new THREE.AmbientLight(0xfff5f8, 0.65);
-    this.scene.add(ambient);
+  private cubeRenderTarget!: THREE.WebGLCubeRenderTarget;
 
-    const key = new THREE.DirectionalLight(0xffffff, 1.4);
-    key.position.set(2, 4, 5);
-    this.scene.add(key);
-
-    const fill = new THREE.DirectionalLight(0xffd6e8, 0.55);
-    fill.position.set(-4, 1, 2);
-    this.scene.add(fill);
-
-    const rim = new THREE.PointLight(BUBBLE.rim, 0.6, 20);
-    rim.position.set(-3, 2, -2);
-    this.scene.add(rim);
+  setNoiseLevel(value: number): void {
+    this.noiseLevel = THREE.MathUtils.clamp(value, 0, 1);
+    this.material.uniforms.uNoiseLevel.value = this.noiseLevel;
   }
 
-  private createBubble(): THREE.Mesh {
-    const geometry = new THREE.SphereGeometry(BUBBLE.radius, 128, 128);
+  setRefractionRatio(value: number): void {
+    this.refractionRatio = THREE.MathUtils.clamp(value, 0.915, 1.0);
+    this.material.uniforms.uRefractionRatio.value = this.refractionRatio;
+  }
 
-    const material = new THREE.MeshPhysicalMaterial({
-      color: BUBBLE.tint,
-      metalness: 0,
-      roughness: 0.04,
-      transmission: 1,
-      thickness: 0.75,
-      ior: 1.33,
-      clearcoat: 1,
-      clearcoatRoughness: 0.02,
-      attenuationColor: new THREE.Color(BUBBLE.attenuation),
-      attenuationDistance: 0.55,
-      transparent: true,
-      side: THREE.FrontSide,
-      envMapIntensity: 1.2,
-    });
+  setReflectivity(value: number): void {
+    this.reflectivity = THREE.MathUtils.clamp(value, 0, 3);
+    this.material.uniforms.uReflectivity.value = this.reflectivity;
+  }
 
-    const mesh = new THREE.Mesh(geometry, material);
-    return mesh;
+  setThickness(value: number): void {
+    this.thickness = THREE.MathUtils.clamp(value, 0, 5);
+    this.material.uniforms.uThickness.value = this.thickness;
   }
 
   start(): void {
@@ -105,6 +119,8 @@ export class ClairOrb {
 
   dispose(): void {
     window.removeEventListener('resize', this.onResize);
+    this.cubeRenderTarget.dispose();
+    this.material.dispose();
     this.renderer.dispose();
   }
 
@@ -113,16 +129,13 @@ export class ClairOrb {
     this.camera.aspect = innerWidth / innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(innerWidth, innerHeight);
+    this.composer.setSize(innerWidth, innerHeight);
   };
 
   private animate = (): void => {
     requestAnimationFrame(this.animate);
-
-    const t = this.clock.getElapsedTime();
-    this.orb.rotation.y = t * 0.08;
-    this.orb.rotation.x = Math.sin(t * 0.15) * 0.06;
-
+    this.material.uniforms.uTime.value = this.clock.getElapsedTime();
     this.controls.update();
-    this.renderer.render(this.scene, this.camera);
+    this.composer.render();
   };
 }
