@@ -1,6 +1,8 @@
-# Clair Voice Orb
+# Clair Health Voice AI Exploration
 
-Generative orb exploration for Clair's AI voice experience.
+Generative glass orb with floral interior energy for Clair's voice AI experience.
+
+**Live demo:** https://airfan003.github.io/ClairVoiceAI/
 
 ## Quick start
 
@@ -9,13 +11,20 @@ npm install
 npm run dev
 ```
 
-## Current step: Refractive bubble
+Open http://localhost:5173/ClairVoiceAI/ (the app uses a subpath base for GitHub Pages).
 
-The orb uses the [Stemkoski refraction technique](https://stemkoski.github.io/Three.js/Refraction.html): a `CubeCamera` captures the scene each frame and maps it onto a sphere with `CubeRefractionMapping`, giving a true glass/bubble refraction look. Simplex noise still displaces the surface (controlled by the **Noise level** slider), and a faint Fresnel rim keeps the silhouette visible on black.
+## Deploy to GitHub Pages
 
-**Next steps:** tune color palette, inner flower bloom, voice reactivity.
+This project is a Vite + TypeScript app. GitHub Pages must serve the **built** `dist/` output, not the source `index.html`.
+
+1. In the repo on GitHub, go to **Settings → Pages**
+2. Set **Build and deployment → Source** to **GitHub Actions** (not “Deploy from branch”)
+3. Push to `main` — the workflow in `.github/workflows/deploy.yml` runs `npm run build` and deploys `dist/`
+
+The Vite `base` is set to `/ClairVoiceAI/` so assets load correctly at `https://<user>.github.io/ClairVoiceAI/`.
 
 ## Stack
 
 - Three.js
 - Vite
+- TypeScript
