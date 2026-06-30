@@ -18,10 +18,10 @@ import {
 const BUBBLE = { background: 0x000000, radius: 2 };
 
 const APPEARANCE = {
-  primary: '#ffc4b0',
-  secondary: '#fff5ee',
-  shellTint: '#edd5c8',
-  shellIridescence: '#e8c4d8',
+  primary: '#ff9c7a',
+  secondary: '#ffc2dc',
+  shellTint: '#ffdbed',
+  shellIridescence: '#ff8ac8',
   shellIridescenceStrength: 0.55,
   rim: '#fff8f4',
 };
