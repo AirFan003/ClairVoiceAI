@@ -4,9 +4,27 @@ import { bakeSoftEnvCube, bakeSoftEnvPMREM } from './softEnvironment';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { bubbleFragmentShader, bubbleVertexShader } from './bubbleShaders';
+import {
+  bubbleVertexShader,
+  buildBubbleFragmentShader,
+} from './bubbleShaders';
+import { internalEnergyGLSL } from './internalEnergy.glsl';
 
 const BUBBLE = { background: 0x000000, radius: 2 };
+
+/** Warm Clair wave palette + Magical AI Orb fractal defaults */
+const ENERGY = {
+  primary: new THREE.Color(0xffc4b0),
+  secondary: new THREE.Color(0xfff5ee),
+  density: 1.8,
+  internalAnim: 0.43,
+  fractalIters: 4,
+  fractalScale: 0.97,
+  fractalDecay: -14.5,
+  smoothness: 0.031,
+  asymmetry: 0.38,
+  speed: 0.5,
+};
 
 export class ClairOrb {
   private scene: THREE.Scene;
@@ -17,12 +35,14 @@ export class ClairOrb {
   private orb: THREE.Mesh;
   private material: THREE.ShaderMaterial;
   private envMap!: THREE.Texture;
+  private localCam = new THREE.Vector3();
   private clock = new THREE.Clock();
 
   noiseLevel = 1;
   refractionRatio = 0.985;
   reflectivity = 0.55;
   thickness = 1.5;
+  energyDensity = ENERGY.density;
 
   constructor(canvas: HTMLCanvasElement) {
     this.scene = new THREE.Scene();
@@ -58,7 +78,7 @@ export class ClairOrb {
 
     this.material = new THREE.ShaderMaterial({
       vertexShader: bubbleVertexShader,
-      fragmentShader: bubbleFragmentShader,
+      fragmentShader: buildBubbleFragmentShader(internalEnergyGLSL),
       uniforms: {
         uTime: { value: 0 },
         uNoiseLevel: { value: this.noiseLevel },
@@ -66,6 +86,16 @@ export class ClairOrb {
         uReflectivity: { value: this.reflectivity },
         uThickness: { value: this.thickness },
         uEnvMap: { value: this.envMap },
+        uLocalCamPos: { value: new THREE.Vector3() },
+        uPrimaryColor: { value: ENERGY.primary.clone() },
+        uSecondaryColor: { value: ENERGY.secondary.clone() },
+        uEnergyDensity: { value: this.energyDensity },
+        uFractalIters: { value: ENERGY.fractalIters },
+        uFractalScale: { value: ENERGY.fractalScale },
+        uFractalDecay: { value: ENERGY.fractalDecay },
+        uInternalAnim: { value: ENERGY.internalAnim },
+        uSmoothness: { value: ENERGY.smoothness },
+        uAsymmetry: { value: ENERGY.asymmetry },
       },
       transparent: true,
       depthWrite: false,
@@ -80,13 +110,14 @@ export class ClairOrb {
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    const bloom = new UnrealBloomPass(
-      new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.35,
-      0.45,
-      0.75
+    this.composer.addPass(
+      new UnrealBloomPass(
+        new THREE.Vector2(window.innerWidth, window.innerHeight),
+        0.4,
+        0.45,
+        0.72
+      )
     );
-    this.composer.addPass(bloom);
 
     window.addEventListener('resize', this.onResize);
   }
@@ -96,6 +127,8 @@ export class ClairOrb {
   setNoiseLevel(value: number): void {
     this.noiseLevel = THREE.MathUtils.clamp(value, 0, 1);
     this.material.uniforms.uNoiseLevel.value = this.noiseLevel;
+    this.material.uniforms.uInternalAnim.value =
+      ENERGY.internalAnim * (0.15 + this.noiseLevel * 0.85);
   }
 
   setRefractionRatio(value: number): void {
@@ -113,7 +146,13 @@ export class ClairOrb {
     this.material.uniforms.uThickness.value = this.thickness;
   }
 
+  setEnergyDensity(value: number): void {
+    this.energyDensity = THREE.MathUtils.clamp(value, 0.1, 3);
+    this.material.uniforms.uEnergyDensity.value = this.energyDensity;
+  }
+
   start(): void {
+    this.setNoiseLevel(this.noiseLevel);
     this.animate();
   }
 
@@ -134,7 +173,14 @@ export class ClairOrb {
 
   private animate = (): void => {
     requestAnimationFrame(this.animate);
-    this.material.uniforms.uTime.value = this.clock.getElapsedTime();
+
+    this.material.uniforms.uTime.value += this.clock.getDelta() * ENERGY.speed;
+
+    this.orb.updateMatrixWorld();
+    this.localCam.copy(this.camera.position);
+    this.orb.worldToLocal(this.localCam);
+    this.material.uniforms.uLocalCamPos.value.copy(this.localCam);
+
     this.controls.update();
     this.composer.render();
   };

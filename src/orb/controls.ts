@@ -29,6 +29,13 @@ export function createOrbControls(orb: ClairOrb): void {
   );
 
   bindSlider(
+    'wave-density',
+    'wave-density-value',
+    (v) => orb.setEnergyDensity(v),
+    (v) => v.toFixed(1)
+  );
+
+  bindSlider(
     'refraction-ratio',
     'refraction-ratio-value',
     (v) => orb.setRefractionRatio(v),

@@ -1,6 +1,5 @@
 /**
- * Custom GLSL bubble — visible on black backgrounds.
- * Combines SoapBubble noise/iridescence + Stemkoski-style env refraction + fresnel glass shell.
+ * Clair bubble shell + Magical AI Orb interior waves (sabosugi reference).
  */
 export const bubbleVertexShader = /* glsl */ `
 uniform float uTime;
@@ -9,6 +8,7 @@ uniform float uNoiseLevel;
 varying vec3 vNormal;
 varying vec3 vViewPosition;
 varying vec3 vWorldPosition;
+varying vec3 vLocalPosition;
 varying float vNoise;
 
 vec4 permute(vec4 x) { return mod(((x * 34.0) + 1.0) * x, 289.0); }
@@ -69,6 +69,7 @@ void main() {
   vNoise = snoise(vec4(position / 1.5, t));
 
   vec3 displaced = position + normal * vNoise * uNoiseLevel / 7.0;
+  vLocalPosition = displaced;
 
   vec4 worldPos = modelMatrix * vec4(displaced, 1.0);
   vWorldPosition = worldPos.xyz;
@@ -90,19 +91,20 @@ uniform samplerCube uEnvMap;
 varying vec3 vNormal;
 varying vec3 vViewPosition;
 varying vec3 vWorldPosition;
+varying vec3 vLocalPosition;
 varying float vNoise;
+
+__INTERNAL_ENERGY__
 
 vec3 hsl2rgb(vec3 c) {
   vec3 rgb = clamp(abs(mod(c.x * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
   return c.z + c.y * (rgb - 0.5) * (1.0 - abs(2.0 * c.z - 1.0));
 }
 
-// Blur cubemap samples to soften hard/env seams
 vec3 sampleSoftEnv(samplerCube map, vec3 dir) {
   vec3 sum = vec3(0.0);
   float w = 0.0;
   sum += textureCube(map, dir).rgb * 2.0; w += 2.0;
-
   const float spread = 0.045;
   sum += textureCube(map, normalize(dir + vec3(spread, 0.0, 0.0))).rgb; w += 1.0;
   sum += textureCube(map, normalize(dir + vec3(-spread, 0.0, 0.0))).rgb; w += 1.0;
@@ -110,7 +112,6 @@ vec3 sampleSoftEnv(samplerCube map, vec3 dir) {
   sum += textureCube(map, normalize(dir + vec3(0.0, -spread, 0.0))).rgb; w += 1.0;
   sum += textureCube(map, normalize(dir + vec3(0.0, 0.0, spread))).rgb; w += 1.0;
   sum += textureCube(map, normalize(dir + vec3(0.0, 0.0, -spread))).rgb; w += 1.0;
-
   return sum / w;
 }
 
@@ -125,16 +126,20 @@ void main() {
   vec3 n = normalize(vNormal);
   vec3 v = normalize(vViewPosition);
 
-  // Fresnel — defines the glass bubble silhouette on black
   float fresnel = pow(1.0 - max(dot(n, v), 0.0), 2.4);
   float facing = max(dot(n, v), 0.0);
+  float edgeAA = smoothstep(0.0, 0.05, facing);
 
-  // Warm pearl iridescence — peach, cream, soft rose (Clair palette)
+  // --- Interior organic wave energy (Magical AI Orb) ---
+  vec3 waves = traceInteriorEnergy(vLocalPosition);
+  waves = clamp(waves, 0.0, 1.0) * edgeAA;
+  float waveMix = mix(0.45, 1.0, uNoiseLevel);
+
+  // --- Warm glass shell ---
   float warmHue = mix(0.03 + vNoise * 0.05, 0.97 + vNoise * 0.03, smoothstep(-0.3, 0.5, vNoise));
   vec3 film = hsl2rgb(vec3(warmHue, 0.22 + abs(vNoise) * 0.1, 0.72));
   film = mix(film, vec3(1.0, 0.97, 0.93), 0.45);
 
-  // Soft environment sampling — blurred + lower contrast
   vec3 viewDir = normalize(vWorldPosition - cameraPosition);
   vec3 reflectDir = reflect(viewDir, n);
   vec3 refractDir = refract(viewDir, n, uRefractionRatio);
@@ -142,26 +147,29 @@ void main() {
     mix(sampleSoftEnv(uEnvMap, reflectDir), sampleSoftEnv(uEnvMap, refractDir), 0.5)
   );
 
-  // Glass body — warm film + env blend (reflectivity can exceed 1)
   float bodyMask = mix(0.4 + uThickness * 0.1, 0.9, fresnel);
-  vec3 glass = film * bodyMask * 0.85;
+  vec3 glass = film * bodyMask * 0.55;
   float envMix = uReflectivity * mix(0.28, 0.62, fresnel);
   glass = mix(glass, envSample, min(envMix, 1.0));
   glass += envSample * max(envMix - 1.0, 0.0) * 0.3;
 
-  // Very soft warm highlight — broad, not a sharp hotspot
   vec3 lightDir = normalize(vec3(0.4, 0.9, 0.5));
   vec3 halfDir = normalize(lightDir + v);
   float spec = pow(max(dot(n, halfDir), 0.0), 12.0);
   glass += vec3(1.0, 0.98, 0.94) * spec * 0.08 * min(uReflectivity, 1.5);
+  glass += vec3(1.0, 0.96, 0.91) * fresnel * 0.38;
 
-  // Warm white rim
-  glass += vec3(1.0, 0.96, 0.91) * fresnel * 0.42;
+  // Composite: waves visible through the glass centre, shell at edges
+  vec3 finalColor = glass + waves * waveMix * mix(0.55, 0.95, 1.0 - fresnel * 0.35);
+  finalColor += waves * facing * 0.08 * uNoiseLevel;
 
-  // Subtle inner depth from facing angle
-  glass += film * facing * 0.12 * uNoiseLevel;
+  float waveLuma = max(waves.r, max(waves.g, waves.b));
+  float alpha = clamp(0.5 + fresnel * 0.35 + waveLuma * 0.45, 0.0, 1.0) * edgeAA;
 
-  float alpha = 0.55 + fresnel * 0.4;
-  gl_FragColor = vec4(glass, alpha);
+  gl_FragColor = vec4(finalColor, alpha);
 }
 `;
+
+export function buildBubbleFragmentShader(internalEnergyCode: string): string {
+  return bubbleFragmentShader.replace('__INTERNAL_ENERGY__', internalEnergyCode);
+}
