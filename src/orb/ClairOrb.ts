@@ -60,7 +60,7 @@ export class ClairOrb {
 
   private currentState = cloneState(VOICE_STATE_PRESETS.idle);
   private targetState = cloneState(VOICE_STATE_PRESETS.idle);
-  private voiceState: VoiceState = 'idle';
+  private selectedPreset: VoiceState | null = 'idle';
   private animSpeed = VOICE_STATE_PRESETS.idle.animSpeed;
   private readonly transitionRate = 2.8;
 
@@ -155,8 +155,8 @@ export class ClairOrb {
 
   private cubeRenderTarget!: THREE.WebGLCubeRenderTarget;
 
-  getActiveVoiceState(): VoiceState {
-    return this.voiceState;
+  getActiveVoiceState(): VoiceState | null {
+    return this.selectedPreset;
   }
 
   getStateSnapshot(): OrbStateConfig {
@@ -168,12 +168,12 @@ export class ClairOrb {
   }
 
   setVoiceState(state: VoiceState): void {
-    this.voiceState = state;
+    this.selectedPreset = state;
     this.targetState = cloneState(VOICE_STATE_PRESETS[state]);
   }
 
   clearVoiceStateSelection(): void {
-    this.voiceState = 'idle';
+    this.selectedPreset = null;
     this.targetState = cloneState(this.currentState);
   }
 

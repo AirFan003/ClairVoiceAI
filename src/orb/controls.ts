@@ -67,7 +67,7 @@ function setActiveStateButton(state: VoiceState | null): void {
   });
 }
 
-function bindVoiceStates(orb: ClairOrb, onManualTweak: () => void): void {
+function bindVoiceStates(orb: ClairOrb): void {
   const picker = document.getElementById('voice-state-picker');
   if (!picker) return;
 
@@ -82,7 +82,6 @@ function bindVoiceStates(orb: ClairOrb, onManualTweak: () => void): void {
 
   syncSlidersFromState(VOICE_STATE_PRESETS.idle);
   setActiveStateButton('idle');
-  onManualTweak();
 }
 
 export function createOrbControls(orb: ClairOrb): void {
@@ -91,7 +90,7 @@ export function createOrbControls(orb: ClairOrb): void {
     setActiveStateButton(null);
   };
 
-  bindVoiceStates(orb, clearPresetSelection);
+  bindVoiceStates(orb);
 
   bindSlider(
     'noise-level',
