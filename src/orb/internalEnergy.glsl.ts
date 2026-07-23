@@ -1,4 +1,4 @@
-/** Volumetric fractal energy — Magical AI Orb, tuned for floral radial structure */
+/** Volumetric smoke whose density form follows the Clair logo mark */
 export const internalEnergyGLSL = /* glsl */ `
 uniform float uTime;
 uniform vec3 uLocalCamPos;
@@ -14,40 +14,80 @@ uniform float uAsymmetry;
 uniform float uPetalCount;
 uniform float uPetalStrength;
 uniform float uBloomRings;
+uniform float uLogoCoherence;
+uniform float uSmokeDisrupt;
+uniform sampler2D uLogoMap;
 
-float petalEnvelope(vec3 anchor) {
-  if (uPetalStrength < 0.001) return 1.0;
-
-  float azimuth = atan(anchor.y, anchor.x);
-  float radius = length(anchor);
-  float elevation = atan(length(anchor.xy), anchor.z + 0.001);
-  float spin = uTime * uInternalAnim * 0.15;
-
-  float lobeWave = cos(uPetalCount * azimuth + spin);
-  float lobes = pow(clamp(0.5 + 0.5 * lobeWave, 0.0, 1.0), mix(1.0, 2.2, uPetalStrength));
-  float tips = pow(abs(sin(uPetalCount * 0.5 * azimuth + spin * 0.5)), mix(1.0, 1.6, uPetalStrength));
-  float depth = 0.55 + 0.45 * cos(uPetalCount * 0.5 * elevation + spin * 0.5);
-  float rings = 1.0;
-
-  if (uBloomRings > 0.01) {
-    float ringWave = abs(sin(radius * uBloomRings * 2.8 - spin * 0.7));
-    rings = 0.28 + 0.72 * pow(ringWave, 0.75);
-  }
-
-  float core = smoothstep(0.0, 0.18, radius);
-  float edge = 1.0 - smoothstep(1.35, 1.82, radius);
-  float stamen = exp(-radius * radius * 10.0);
-  float envelope = lobes * mix(1.0, tips, 0.45) * depth * rings * core * edge;
-  envelope = mix(envelope, 1.0, stamen * uPetalStrength * 0.55);
-  envelope = pow(envelope, mix(1.0, 0.58, uPetalStrength));
-
-  return mix(1.0, envelope, uPetalStrength);
+mat2 logoSpin() {
+  float spin = uTime * uInternalAnim * 0.04;
+  return mat2(cos(spin), sin(spin), -sin(spin), cos(spin));
 }
 
-float evaluateStructure(vec3 pos) {
-  float densityAcc = 0.0;
-  vec3 anchor = pos;
+float logoMarkSample(vec2 p) {
+  float scale = mix(0.4, 0.5, uPetalStrength);
+  vec2 uv = vec2(p.x * scale + 0.5, 0.5 - p.y * scale);
+  if (uv.x < 0.01 || uv.x > 0.99 || uv.y < 0.01 || uv.y > 0.99) return 0.0;
+  vec3 tex = texture2D(uLogoMap, uv).rgb;
+  float luma = max(tex.r, max(tex.g, tex.b));
+  return smoothstep(0.02, 0.72, luma);
+}
 
+float clairLogoField(vec3 pos) {
+  if (uPetalStrength < 0.001) return 0.0;
+
+  vec2 p = logoSpin() * pos.xy;
+  float mark = logoMarkSample(p);
+  float zSoft = exp(-pos.z * pos.z * 1.8);
+  float radial = length(pos.xy);
+  float focus = 1.0 - smoothstep(0.85, 1.35, radial);
+
+  return mark * mix(0.55, 1.0, zSoft) * mix(0.7, 1.0, focus);
+}
+
+float softLogo(vec3 pos) {
+  float s = 0.0;
+  s += clairLogoField(pos) * 0.34;
+  s += clairLogoField(pos * vec3(0.98, 0.98, 1.01)) * 0.24;
+  s += clairLogoField(pos * vec3(1.02, 1.02, 0.99)) * 0.2;
+  s += clairLogoField(pos * vec3(1.05, 1.05, 0.97)) * 0.14;
+  s += clairLogoField(pos * vec3(0.95, 0.95, 1.02)) * 0.08;
+  return clamp(s, 0.0, 1.0);
+}
+
+float logoForm(vec3 pos) {
+  float l = softLogo(pos);
+  return pow(l, mix(0.45, 0.82, uLogoCoherence));
+}
+
+vec3 logoWarp(vec3 pos) {
+  vec2 p = logoSpin() * pos.xy;
+  float eps = 0.028;
+  float l0 = logoMarkSample(p);
+  float lx = logoMarkSample(p + vec2(eps, 0.0));
+  float ly = logoMarkSample(p + vec2(0.0, eps));
+  vec2 grad = vec2(lx - l0, ly - l0) / eps;
+
+  float warpAmt = uLogoCoherence * uPetalStrength * mix(0.04, 0.11, uPetalStrength);
+  float turb = sin(uTime * uInternalAnim * 2.0 + dot(pos, vec3(3.1, 2.4, 1.7))) * uSmokeDisrupt * 0.025;
+  vec2 offset = logoSpin() * (grad * warpAmt + vec2(turb));
+  return pos + vec3(offset, turb * 0.5);
+}
+
+float clairPetalBias(float azimuth) {
+  float wings = pow(abs(cos(azimuth)), 0.5);
+  float seeds = pow(abs(sin(azimuth)), 1.75);
+  return mix(seeds, wings, 0.7);
+}
+
+float volumeEnvelope(vec3 anchor) {
+  float radius = length(anchor);
+  float core = smoothstep(0.0, 0.15, radius);
+  float edge = 1.0 - smoothstep(1.25, 1.88, radius);
+  return core * edge;
+}
+
+float evaluateFractal(vec3 pos, vec3 anchor, float logo) {
+  float densityAcc = 0.0;
   float animTime = uTime * uInternalAnim;
   float s = sin(animTime);
   float c = cos(animTime);
@@ -65,13 +105,19 @@ float evaluateStructure(vec3 pos) {
     pos.yz *= rotAnim;
     pos.xz *= rotAsym1;
     pos.yz *= rotAsym2;
-    pos += vec3(0.05, -0.02, 0.03) * uAsymmetry;
+    pos += vec3(0.05, -0.02, 0.03) * uAsymmetry * (1.0 + uSmokeDisrupt * 0.45);
 
-    if (uPetalStrength > 0.001) {
+    if (uLogoCoherence > 0.01) {
       float angle = atan(pos.y, pos.x);
-      float pinch = 1.0 + uPetalStrength * 0.2 * cos(uPetalCount * angle + float(step) * 0.35);
+      float wingBias = clairPetalBias(angle);
+      float pinch =
+        1.0 +
+        uLogoCoherence *
+          uPetalStrength *
+          0.12 *
+          cos(6.0 * angle + float(step) * 0.28) *
+          wingBias;
       pos.xy *= pinch;
-      pos.z *= 1.0 - uPetalStrength * 0.06 * (1.0 - cos(uPetalCount * angle));
     }
 
     vec3 foldedPos = sqrt(pos * pos + uSmoothness);
@@ -84,10 +130,42 @@ float evaluateStructure(vec3 pos) {
     pos.yz = vec2(ySq - zSq, yz2);
     pos = vec3(pos.z, pos.x, pos.y);
 
-    densityAcc += exp(uFractalDecay * abs(dot(pos, anchor)));
+    float fold = exp(uFractalDecay * abs(dot(pos, anchor)));
+    float logoWeight = mix(1.0, 0.45 + logo * 0.95, uLogoCoherence * uPetalStrength);
+    densityAcc += fold * logoWeight;
   }
 
-  return densityAcc * 0.5 * petalEnvelope(anchor);
+  return densityAcc * 0.5;
+}
+
+float evaluateStructure(vec3 pos) {
+  vec3 warped = logoWarp(pos);
+  float logo = logoForm(pos);
+  float envelope = volumeEnvelope(pos);
+  float smoke = evaluateFractal(warped, pos, logo) * envelope;
+
+  if (uPetalStrength < 0.001) {
+    return smoke;
+  }
+
+  float form = mix(1.0, 0.25 + logo * 0.95, uLogoCoherence * uPetalStrength);
+  float field = smoke * form;
+
+  float turbulence =
+    smoke *
+    uSmokeDisrupt *
+    (0.08 + 0.14 * (1.0 - uLogoCoherence)) *
+    (0.65 + 0.35 * sin(uTime * uInternalAnim * 3.0 + pos.x * 5.0 + pos.y * 4.0));
+
+  field += turbulence * mix(0.35, 1.0, logo);
+
+  if (uBloomRings > 0.01 && uSmokeDisrupt > 0.2) {
+    float radius = length(pos.xy);
+    float rings = abs(sin(radius * uBloomRings * 2.4 - uTime * uInternalAnim * 0.5));
+    field += smoke * rings * uSmokeDisrupt * 0.12 * logo;
+  }
+
+  return field;
 }
 
 vec2 getVolumeBounds(vec3 origin, vec3 dir, float radius) {
@@ -111,13 +189,15 @@ vec3 traceEnergy(vec3 origin, vec3 dir, vec2 limits) {
 
     vec3 samplePoint = origin + currentDepth * dir;
     fieldVal = evaluateStructure(samplePoint);
-    fieldVal = pow(max(fieldVal, 0.0), mix(1.0, 0.68, uPetalStrength));
+    fieldVal = pow(max(fieldVal, 0.0), mix(1.0, 0.82, uSmokeDisrupt * 0.35));
 
+    float logoVal = logoForm(samplePoint);
     float vSq = fieldVal * fieldVal;
-    float gradientBlend = smoothstep(0.0, mix(0.4, 0.22, uPetalStrength), fieldVal);
+    float gradientBlend = smoothstep(0.0, 0.32, fieldVal);
     vec3 currentGradient = mix(uSecondaryColor, uPrimaryColor, gradientBlend);
-    vec3 emission = currentGradient * (fieldVal * 1.8 + vSq * 1.0);
+    currentGradient = mix(currentGradient, mix(uSecondaryColor, uPrimaryColor, 0.15), logoVal * uLogoCoherence * 0.2);
 
+    vec3 emission = currentGradient * (fieldVal * 1.75 + vSq * 0.75);
     finalEnergy = 0.99 * finalEnergy + (0.08 * uEnergyDensity) * emission;
   }
 

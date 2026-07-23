@@ -40,6 +40,8 @@ const STATE_KEYS = [
   'internalAnim',
   'animSpeed',
   'autoRotateSpeed',
+  'logoCoherence',
+  'smokeDisrupt',
 ] as const satisfies readonly (keyof OrbStateConfig)[];
 
 function cloneState(config: OrbStateConfig): OrbStateConfig {
@@ -100,6 +102,24 @@ export class ClairOrb {
     this.controls.autoRotate = true;
     this.controls.autoRotateSpeed = this.currentState.autoRotateSpeed;
 
+    const logoUrl = `${import.meta.env.BASE_URL}clair-logo-mark.png`;
+    const logoMap = new THREE.TextureLoader().load(
+      logoUrl,
+      (texture) => {
+        texture.colorSpace = THREE.SRGBColorSpace;
+        this.material.uniforms.uLogoMap.value = texture;
+      },
+      undefined,
+      (error) => {
+        console.error('Failed to load Clair logo mark:', logoUrl, error);
+      }
+    );
+    logoMap.wrapS = THREE.ClampToEdgeWrapping;
+    logoMap.wrapT = THREE.ClampToEdgeWrapping;
+    logoMap.minFilter = THREE.LinearFilter;
+    logoMap.magFilter = THREE.LinearFilter;
+    logoMap.flipY = true;
+
     this.material = new THREE.ShaderMaterial({
       vertexShader: bubbleVertexShader,
       fragmentShader: buildBubbleFragmentShader(internalEnergyGLSL),
@@ -127,6 +147,9 @@ export class ClairOrb {
         uPetalCount: { value: this.currentState.petalCount },
         uPetalStrength: { value: this.currentState.petalStrength },
         uBloomRings: { value: this.currentState.bloomRings },
+        uLogoCoherence: { value: this.currentState.logoCoherence },
+        uSmokeDisrupt: { value: this.currentState.smokeDisrupt },
+        uLogoMap: { value: logoMap },
       },
       transparent: true,
       depthWrite: false,
@@ -189,6 +212,8 @@ export class ClairOrb {
     this.material.uniforms.uPetalCount.value = config.petalCount;
     this.material.uniforms.uPetalStrength.value = config.petalStrength;
     this.material.uniforms.uBloomRings.value = config.bloomRings;
+    this.material.uniforms.uLogoCoherence.value = config.logoCoherence;
+    this.material.uniforms.uSmokeDisrupt.value = config.smokeDisrupt;
     this.controls.autoRotateSpeed = config.autoRotateSpeed;
     this.animSpeed = config.animSpeed;
   }
